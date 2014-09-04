@@ -35,8 +35,8 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
      frame bounds. */
   if (left < 0) { left = 0; }
   if (top < 0) { top = 0; }
-  if (right > (w - 8)) { right = w; }
-  if (bottom > (h - 8)) { bottom = h; }
+  if (right > (w - 8)) { right = w - 8; }
+  if (bottom > (h - 8)) { bottom = h - 8; }
 
   int x, y;
 
