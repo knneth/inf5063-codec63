@@ -44,6 +44,12 @@
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+struct stats {
+  double min;
+  double max;
+  double sum;
+};
+
 struct yuv
 {
   uint8_t *Y;

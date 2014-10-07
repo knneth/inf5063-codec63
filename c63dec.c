@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "contrib/qpsnr.h"
 #include "c63.h"
 #include "c63_write.h"
 #include "common.h"
@@ -429,9 +430,54 @@ void decode_c63_frame(struct c63_common *cm, FILE *fout)
   ++cm->framenum;
 }
 
+static void print_stats(struct c63_common *cm, FILE *fref,
+			struct stats *s_psnr, struct stats *s_ssim)
+{
+  yuv_t *ref = read_yuv(fref, cm);
+  double psnr[4];
+  double ssim[4];
+  unsigned i;
+
+  if (ref == NULL) {
+    return;
+  }
+
+  psnr[0] = compute_psnr(cm->curframe->recons->Y, ref->Y, cm->ypw * cm->yph);
+  psnr[1] = compute_psnr(cm->curframe->recons->U, ref->U, cm->upw * cm->uph);
+  psnr[2] = compute_psnr(cm->curframe->recons->V, ref->V, cm->vpw * cm->vph);
+  psnr[3] = (psnr[0]*2)/3 + psnr[1]/6 + psnr[2]/6;
+  ssim[0] = compute_ssim_8x8(cm->curframe->recons->Y, ref->Y, cm->padw[0], cm->padh[0]);
+  ssim[1] = compute_ssim_8x8(cm->curframe->recons->U, ref->U, cm->padw[1], cm->padh[1]);
+  ssim[2] = compute_ssim_8x8(cm->curframe->recons->V, ref->V, cm->padw[2], cm->padh[2]);
+  ssim[3] = (ssim[0]*2)/3 + ssim[1]/6 + ssim[2]/6;
+  
+  for (i = 0; i < 4; i++) {
+    if (s_psnr[i].min == 0) {
+      s_psnr[i].min = psnr[i];
+    }
+
+    if (s_ssim[i].min == 0) {
+      s_ssim[i].min = ssim[i];
+    }
+
+    s_psnr[i].min = fmin(s_psnr[i].min, psnr[i]);
+    s_psnr[i].max = fmax(s_psnr[i].max, psnr[i]);
+    s_psnr[i].sum += psnr[i];
+    s_ssim[i].min = fmin(s_ssim[i].min, ssim[i]);
+    s_ssim[i].max = fmax(s_ssim[i].max, ssim[i]);
+    s_ssim[i].sum += ssim[i];
+  }
+
+  printf(" - psnr %4.1f, ssim %.3f", psnr[3], ssim[3]);
+  free(ref->Y);
+  free(ref->U);
+  free(ref->V);
+  free(ref);
+}
+
 static void print_help(int argc, char **argv)
 {
-  printf("Usage: %s input.c63 output.yuv\n\n", argv[0]);
+  printf("Usage: %s input.c63 output.yuv [reference.yuv]\n\n", argv[0]);
   printf("Tip! Use mplayer to playback raw YUV file:\n");
   printf("mplayer -demuxer rawvideo -rawvideo w=352:h=288 foreman.yuv\n\n");
   exit(EXIT_FAILURE);
@@ -439,10 +485,11 @@ static void print_help(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-  if(argc < 3 || argc > 3) { print_help(argc, argv); }
+  if(argc < 3 || argc > 4) { print_help(argc, argv); }
 
   FILE *fin = fopen(argv[1], "rb");
   FILE *fout = fopen(argv[2], "wb");
+  FILE *fref = NULL;
 
   if (!fin || !fout)
   {
@@ -450,9 +497,19 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
+  if (argc == 4) {
+    fref = fopen(argv[3], "rb");
+    
+    if (fref == NULL) {
+      perror("fopen");
+    }
+  }
+
   struct c63_common *cm = calloc(1, sizeof(*cm));
   cm->e_ctx.fp = fin;
 
+  struct stats s_psnr[4] = {{0}};
+  struct stats s_ssim[4] = {{0}};
   int t;
   int framenum = 0;
   while(1)
@@ -462,14 +519,35 @@ int main(int argc, char **argv)
     }
 
     ungetc(t, fin);
-    printf("Decoding frame %d\n", framenum++);
+    printf("Decoding frame %d", framenum++);
 
     parse_c63_frame(cm);
     decode_c63_frame(cm, fout);
+
+    if (fref != NULL) {
+      print_stats(cm, fref, s_psnr, s_ssim);
+    }
+
+    putchar('\n');
   }
 
   fclose(fin);
   fclose(fout);
+
+  if (fref != NULL) {
+    static const char *planes[] = {"Y", "U", "V", "YUV"};
+    unsigned i;
+
+    fclose(fref);
+    printf("\navg, min, max statistics for %d frames:\n", framenum);
+
+    for (i = 0; i < 4; i++) {
+      printf("%6s  PSNR %5.2f (%5.2f - %5.2f)  SSIM %.3f (%.3f - %.3f)\n",
+	     planes[i],
+	     s_psnr[i].sum / framenum, s_psnr[i].min, s_psnr[i].max,
+	     s_ssim[i].sum / framenum, s_ssim[i].min, s_ssim[i].max);
+    }
+  }
 
   return 0;
 }
