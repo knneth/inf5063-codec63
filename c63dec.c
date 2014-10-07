@@ -453,9 +453,15 @@ int main(int argc, char **argv)
   struct c63_common *cm = calloc(1, sizeof(*cm));
   cm->e_ctx.fp = fin;
 
+  int t;
   int framenum = 0;
-  while(!feof(fin))
+  while(1)
   {
+    if ((t = fgetc(fin)) < 0 || feof(fin)) {
+      break;
+    }
+
+    ungetc(t, fin);
     printf("Decoding frame %d\n", framenum++);
 
     parse_c63_frame(cm);
