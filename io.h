@@ -7,6 +7,8 @@
 #include "c63.h"
 
 // Declarations
+yuv_t* read_yuv(FILE *file, struct c63_common *cm);
+
 int read_bytes(FILE *fp, void *data, unsigned int sz);
 
 uint16_t get_bits(struct entropy_ctx *c, uint8_t n);
