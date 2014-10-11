@@ -54,7 +54,7 @@ double compute_ssim_8x8(const uint8_t *ref, const uint8_t *cmp, unsigned w, unsi
 
   for (y = 0; y < h; y += 8) {
     for (x = 0; x < w; x += 8) {
-      const unsigned offset = y + x;
+      const unsigned offset = y*w + x;
       unsigned ref_acc = 0;
       unsigned ref_acc_2 = 0;
       unsigned cmp_acc = 0;
